@@ -17,3 +17,4 @@
 *.apk
 *.DS_Store
 *.cache
+Logs/
