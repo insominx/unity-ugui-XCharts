@@ -28,14 +28,8 @@ namespace XCharts
 
         protected float m_DefaultLabelWidth;
         protected float m_DefaultFieldWidth;
-
         private int m_SeriesSize;
-
-
-        private bool m_ThemeModuleToggle = false;
         private bool m_BaseModuleToggle = false;
-
-
 
         protected virtual void OnEnable()
         {
@@ -77,30 +71,9 @@ namespace XCharts
         protected virtual void OnStartInspectorGUI()
         {
             EditorGUILayout.PropertyField(m_Script);
-            EditorGUILayout.BeginHorizontal();
-
-            EditorGUIUtility.labelWidth = 20;
-            EditorGUILayout.LabelField("Size");
-            EditorGUIUtility.fieldWidth = 1;
-            m_ChartWidth.floatValue = EditorGUILayout.FloatField(m_ChartWidth.floatValue);
-            m_ChartHeight.floatValue = EditorGUILayout.FloatField(m_ChartHeight.floatValue);
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUIUtility.labelWidth = m_DefaultLabelWidth;
-            EditorGUIUtility.fieldWidth = EditorGUIUtility.labelWidth - 5;
-            m_ThemeModuleToggle = EditorGUILayout.Foldout(m_ThemeModuleToggle,
-                new GUIContent("Theme", "the theme of chart\n主题"),
-                ChartEditorHelper.foldoutStyle);
-            EditorGUILayout.PropertyField(m_Theme, GUIContent.none);
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUIUtility.labelWidth = m_DefaultLabelWidth;
-            EditorGUIUtility.fieldWidth = m_DefaultFieldWidth;
-            if (m_ThemeModuleToggle)
-            {
-                EditorGUILayout.PropertyField(m_ThemeInfo, true);
-            }
+            EditorGUILayout.PropertyField(m_ChartWidth);
+            EditorGUILayout.PropertyField(m_ChartHeight);
+            EditorGUILayout.PropertyField(m_ThemeInfo, true);
             EditorGUILayout.PropertyField(m_Title, true);
             EditorGUILayout.PropertyField(m_Legend, true);
             EditorGUILayout.PropertyField(m_Tooltip, true);

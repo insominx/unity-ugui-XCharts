@@ -150,45 +150,67 @@ namespace XCharts
             return serie;
         }
 
-        public bool AddData(string serieName, float value, int maxDataNumber = 0)
+        public bool AddData(string serieName, float value, string dataName = null, int maxDataNumber = 0)
         {
             var serie = GetSerie(serieName);
             if (serie != null)
             {
-                serie.AddYData(value, maxDataNumber);
+                serie.AddYData(value, dataName, maxDataNumber);
                 return true;
             }
             return false;
         }
 
-        public bool AddData(int index, float value, int maxDataNumber = 0)
+        public bool AddData(int index, float value, string dataName = null, int maxDataNumber = 0)
         {
             var serie = GetSerie(index);
             if (serie != null)
             {
-                serie.AddYData(value, maxDataNumber);
+                serie.AddYData(value, dataName, maxDataNumber);
                 return true;
             }
             return false;
         }
 
-        public bool AddXYData(string serieName, float xValue, float yValue, int maxDataNumber = 0)
+        public bool AddData(string serieName, List<float> multidimensionalData, string dataName = null, int maxDataNumber = 0)
         {
             var serie = GetSerie(serieName);
             if (serie != null)
             {
-                serie.AddXYData(xValue, yValue, maxDataNumber);
+                serie.AddData(multidimensionalData, dataName, maxDataNumber);
                 return true;
             }
             return false;
         }
 
-        public bool AddXYData(int index, float xValue, float yValue, int maxDataNumber = 0)
+        public bool AddData(int serieIndex, List<float> multidimensionalData, string dataName = null, int maxDataNumber = 0)
+        {
+            var serie = GetSerie(serieIndex);
+            if (serie != null)
+            {
+                serie.AddData(multidimensionalData, dataName, maxDataNumber);
+                return true;
+            }
+            return false;
+        }
+
+        public bool AddXYData(string serieName, float xValue, float yValue, string dataName = null, int maxDataNumber = 0)
+        {
+            var serie = GetSerie(serieName);
+            if (serie != null)
+            {
+                serie.AddXYData(xValue, yValue, dataName, maxDataNumber);
+                return true;
+            }
+            return false;
+        }
+
+        public bool AddXYData(int index, float xValue, float yValue, string dataName = null, int maxDataNumber = 0)
         {
             var serie = GetSerie(index);
             if (serie != null)
             {
-                serie.AddXYData(xValue, yValue, maxDataNumber);
+                serie.AddXYData(xValue, yValue, dataName, maxDataNumber);
                 return true;
             }
             return false;
@@ -283,7 +305,7 @@ namespace XCharts
         public bool IsTooltipSelected(int serieIndex)
         {
             var serie = GetSerie(serieIndex);
-            if (serie != null) return serie.selected;
+            if (serie != null) return serie.highlighted;
             else return false;
         }
 
@@ -297,16 +319,18 @@ namespace XCharts
             GetMinMaxValue(dataZoom, axisIndex, true, out minVaule, out maxValue);
         }
 
+        private Dictionary<int, List<Serie>> _stackSeriesForMinMax = new Dictionary<int, List<Serie>>();
+        private Dictionary<int, float> _serieTotalValueForMinMax = new Dictionary<int, float>();
         public void GetMinMaxValue(DataZoom dataZoom, int axisIndex, bool yValue, out int minVaule, out int maxValue)
         {
             float min = int.MaxValue;
             float max = int.MinValue;
             if (IsStack())
             {
-                var stackSeries = GetStackSeries();
-                foreach (var ss in stackSeries)
+                GetStackSeries(ref _stackSeriesForMinMax);
+                foreach (var ss in _stackSeriesForMinMax)
                 {
-                    var seriesTotalValue = new Dictionary<int, float>();
+                    _serieTotalValueForMinMax.Clear();
                     for (int i = 0; i < ss.Value.Count; i++)
                     {
                         var serie = ss.Value[i];
@@ -314,14 +338,14 @@ namespace XCharts
                         var showData = yValue ? serie.GetYDataList(dataZoom) : serie.GetXDataList(dataZoom);
                         for (int j = 0; j < showData.Count; j++)
                         {
-                            if (!seriesTotalValue.ContainsKey(j))
-                                seriesTotalValue[j] = 0;
-                            seriesTotalValue[j] = seriesTotalValue[j] + showData[j];
+                            if (!_serieTotalValueForMinMax.ContainsKey(j))
+                                _serieTotalValueForMinMax[j] = 0;
+                            _serieTotalValueForMinMax[j] = _serieTotalValueForMinMax[j] + showData[j];
                         }
                     }
                     float tmax = int.MinValue;
                     float tmin = int.MaxValue;
-                    foreach (var tt in seriesTotalValue)
+                    foreach (var tt in _serieTotalValueForMinMax)
                     {
                         if (tt.Value > tmax) tmax = tt.Value;
                         if (tt.Value < tmin) tmin = tt.Value;
@@ -400,16 +424,17 @@ namespace XCharts
             return ChartHelper.GetMinDivisibleValue(min);
         }
 
+        private HashSet<string> _setForStack = new HashSet<string>();
         public bool IsStack()
         {
-            HashSet<string> sets = new HashSet<string>();
+            _setForStack.Clear();
             foreach (var serie in m_Series)
             {
                 if (string.IsNullOrEmpty(serie.stack)) continue;
-                if (sets.Contains(serie.stack)) return true;
+                if (_setForStack.Contains(serie.stack)) return true;
                 else
                 {
-                    sets.Add(serie.stack);
+                    _setForStack.Add(serie.stack);
                 }
             }
             return false;
@@ -449,17 +474,77 @@ namespace XCharts
             return stackSeries;
         }
 
-        public List<string> GetSerieNameList()
+        private Dictionary<string, int> sets = new Dictionary<string, int>();
+        public void GetStackSeries(ref Dictionary<int, List<Serie>> stackSeries)
         {
-            var list = new List<string>();
-            foreach (var serie in m_Series)
+            int count = 0;
+            sets.Clear();
+            if (stackSeries == null)
             {
-                if (!string.IsNullOrEmpty(serie.name) && !list.Contains(serie.name))
+                stackSeries = new Dictionary<int, List<Serie>>(m_Series.Count);
+            }
+            else
+            {
+                foreach (var kv in stackSeries)
                 {
-                    list.Add(serie.name);
+                    kv.Value.Clear();
                 }
             }
-            return list;
+            for (int i = 0; i < m_Series.Count; i++)
+            {
+                var serie = m_Series[i];
+                serie.index = i;
+                if (string.IsNullOrEmpty(serie.stack))
+                {
+                    if (!stackSeries.ContainsKey(count))
+                        stackSeries[count] = new List<Serie>(m_Series.Count);
+                    stackSeries[count].Add(serie);
+                    count++;
+                }
+                else
+                {
+                    if (!sets.ContainsKey(serie.stack))
+                    {
+                        sets.Add(serie.stack, count);
+                        if (!stackSeries.ContainsKey(count))
+                            stackSeries[count] = new List<Serie>(m_Series.Count);
+                        stackSeries[count].Add(serie);
+                        count++;
+                    }
+                    else
+                    {
+                        int stackIndex = sets[serie.stack];
+                        stackSeries[stackIndex].Add(serie);
+                    }
+                }
+            }
+        }
+
+        private List<string> serieNameList = new List<string>();
+        public List<string> GetSerieNameList()
+        {
+            serieNameList.Clear();
+            foreach (var serie in m_Series)
+            {
+                if (serie.type == SerieType.Pie)
+                {
+                    foreach (var data in serie.data)
+                    {
+                        if (!string.IsNullOrEmpty(data.name) && !serieNameList.Contains(data.name))
+                        {
+                            serieNameList.Add(data.name);
+                        }
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(serie.name) && !serieNameList.Contains(serie.name))
+                    {
+                        serieNameList.Add(serie.name);
+                    }
+                }
+            }
+            return serieNameList;
         }
 
         public void SetSerieSymbolSizeCallback(SymbolSizeCallback size, SymbolSizeCallback selectedSize)

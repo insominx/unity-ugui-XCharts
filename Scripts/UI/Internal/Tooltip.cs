@@ -1,4 +1,5 @@
-﻿using System.Xml;
+﻿using System.Collections.Generic;
+using System.Xml;
 using System;
 using UnityEngine;
 using UnityEngine.UI;
@@ -64,8 +65,8 @@ namespace XCharts
         /// <summary>
         /// The data index currently indicated by Tooltip.
         /// </summary>
-        public int[] dataIndex { get; set; }
-        public int[] lastDataIndex { get; set; }
+        public List<int> dataIndex { get; set; }
+        public List<int> lastDataIndex { get; set; }
         public float[] xValues { get; set; }
         public float[] yValues { get; set; }
 
@@ -84,8 +85,8 @@ namespace XCharts
                     m_Show = true,
                     xValues = new float[2],
                     yValues = new float[2],
-                    dataIndex = new int[2],
-                    lastDataIndex = new int[2]
+                    dataIndex = new List<int>() { -1, -1 },
+                    lastDataIndex = new List<int>() { -1, -1 }
                 };
                 return tooltip;
             }
@@ -140,6 +141,11 @@ namespace XCharts
             yValues[0] = yValues[1] = -1;
         }
 
+        public bool IsActive()
+        {
+            return m_GameObject != null && m_GameObject.activeInHierarchy;
+        }
+
         public void SetActive(bool flag)
         {
             lastDataIndex[0] = lastDataIndex[1] = -1;
@@ -173,11 +179,13 @@ namespace XCharts
             lastDataIndex[1] = dataIndex[1];
         }
 
-        public bool IsSelected(){
+        public bool IsSelected()
+        {
             return dataIndex[0] >= 0 || dataIndex[1] >= 0;
         }
 
-        public bool IsSelectedDataIndex(int index){
+        public bool IsSelectedDataIndex(int index)
+        {
             return dataIndex[0] == index || dataIndex[1] == index;
         }
     }
