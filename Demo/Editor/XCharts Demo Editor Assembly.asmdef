@@ -1,0 +1,16 @@
+{
+    "name": "XCharts Demo Editor Assembly",
+    "references": [
+        "GUID:88c45a4365642304c9a8e053651b591f"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}
