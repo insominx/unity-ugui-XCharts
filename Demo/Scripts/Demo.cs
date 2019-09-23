@@ -27,9 +27,7 @@ public class Demo : MonoBehaviour
     [SerializeField] private Color m_ButtonNormalColor;
     [SerializeField] private Color m_ButtonSelectedColor;
     [SerializeField] private Color m_ButtonHighlightColor;
-    #pragma warning disable CS0649
     [SerializeField] private List<ChartModule> m_ChartModule;
-    #pragma warning restore CS0649
 
     private GameObject m_BtnClone;
     private Theme m_SelectedTheme;
@@ -82,6 +80,7 @@ public class Demo : MonoBehaviour
         {
             InitModuleButton();
         }
+        if (!Application.isPlaying) m_Mark.enabled = false;
 #endif
     }
 

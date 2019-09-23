@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Text;
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -9,9 +10,40 @@ namespace XCharts
 {
     public static class ChartHelper
     {
-        public static float CRICLE_SMOOTHNESS = 2.5f;
+        public static float CRICLE_SMOOTHNESS = 2f;
         private static UIVertex[] vertex = new UIVertex[4];
+        private static StringBuilder s_Builder = new StringBuilder();
 
+
+        public static string Cancat(string str1, string str2)
+        {
+            s_Builder.Length = 0;
+            s_Builder.Append(str1).Append(str2);
+            return s_Builder.ToString();
+        }
+
+        public static string Cancat(string str1, int i)
+        {
+            s_Builder.Length = 0;
+            s_Builder.Append(str1).Append(ChartCached.IntToStr(i));
+            return s_Builder.ToString();
+        }
+
+        public static void SetActive(GameObject gameObject, bool active)
+        {
+            SetActive(gameObject.transform, active);
+        }
+
+        /// <summary>
+        /// 通过设置scale实现是否显示，优化性能，减少GC
+        /// </summary>
+        /// <param name="transform"></param>
+        /// <param name="active"></param>   
+        public static void SetActive(Transform transform, bool active)
+        {
+            if (active) transform.localScale = Vector3.one;
+            else transform.localScale = Vector3.zero;
+        }
         public static void HideAllObject(GameObject obj, string match = null)
         {
             HideAllObject(obj.transform, match);
@@ -22,13 +54,15 @@ namespace XCharts
             for (int i = 0; i < parent.childCount; i++)
             {
                 if (match == null)
-                    parent.GetChild(i).gameObject.SetActive(false);
+                    SetActive(parent.GetChild(i), false);
+                //parent.GetChild(i).gameObject.SetActive(false);
                 else
                 {
                     var go = parent.GetChild(i);
                     if (go.name.StartsWith(match))
                     {
-                        go.gameObject.SetActive(false);
+                        SetActive(go, false);
+                        //go.gameObject.SetActive(false);
                     }
                 }
             }
@@ -79,6 +113,7 @@ namespace XCharts
                 obj = parent.Find(name).gameObject;
                 obj.SetActive(true);
                 obj.transform.localPosition = Vector3.zero;
+                obj.transform.localScale = Vector3.one;
             }
             else
             {
@@ -139,7 +174,7 @@ namespace XCharts
             return btnObj.GetComponent<Button>();
         }
 
-        public static GameObject AddTooltipContent(string name, Transform parent, Font font)
+        public static GameObject AddTooltipContent(string name, Transform parent, Font font, int fontSize, FontStyle fontStyle)
         {
             var anchorMax = new Vector2(0, 1);
             var anchorMin = new Vector2(0, 1);
@@ -149,11 +184,31 @@ namespace XCharts
             var img = GetOrAddComponent<Image>(tooltipObj);
             img.color = Color.black;
             Text txt = AddTextObject("Text", tooltipObj.transform, font, Color.white, TextAnchor.UpperLeft,
-                    anchorMin, anchorMax, pivot, sizeDelta);
+                    anchorMin, anchorMax, pivot, sizeDelta, fontSize, 0, fontStyle);
             txt.text = "Text";
             txt.transform.localPosition = new Vector2(3, -3);
             tooltipObj.transform.localPosition = Vector3.zero;
             return tooltipObj;
+        }
+
+        public static GameObject AddSerieLabel(string name, Transform parent, Font font, Color textColor, Color backgroundColor,
+            int fontSize, FontStyle fontStyle, float rotate, float width, float height)
+        {
+            var anchorMin = new Vector2(0.5f, 0.5f);
+            var anchorMax = new Vector2(0.5f, 0.5f);
+            var pivot = new Vector2(0.5f, 0.5f);
+            var sizeDelta = (width != 0 && height != 0) ? new Vector2(width, height) : new Vector2(50, fontSize + 2);
+            GameObject labelObj = AddObject(name, parent, anchorMin, anchorMax, pivot, sizeDelta);
+            //var img = GetOrAddComponent<Image>(labelObj);
+            //img.color = backgroundColor;
+            labelObj.transform.localEulerAngles = new Vector3(0, 0, rotate);
+            Text txt = AddTextObject("Text", labelObj.transform, font, textColor, TextAnchor.MiddleCenter,
+                    anchorMin, anchorMax, pivot, sizeDelta, fontSize, 0, fontStyle);
+            txt.text = "Text";
+            txt.transform.localPosition = new Vector2(0, 0);
+            txt.transform.localEulerAngles = Vector3.zero;
+            labelObj.transform.localPosition = Vector3.zero;
+            return labelObj;
         }
 
         public static GameObject AddTooltipLabel(string name, Transform parent, Font font, Vector2 pivot)
@@ -173,19 +228,112 @@ namespace XCharts
             return labelObj;
         }
 
+        public static void DrawArrow(VertexHelper vh, Vector3 startPos, Vector3 arrowPos, float width,
+            float height, float offset, float dent, Color32 color)
+        {
+            var dir = (arrowPos - startPos).normalized;
+
+            var sharpPos = arrowPos + (offset + height / 2) * dir;
+            var middle = sharpPos + (dent - height) * dir;
+            var diff = Vector3.Cross(dir, Vector3.forward).normalized * width / 2;
+            var left = sharpPos - height * dir + diff;
+            var right = sharpPos - height * dir - diff;
+            ChartHelper.DrawTriangle(vh, middle, sharpPos, left, color);
+            ChartHelper.DrawTriangle(vh, middle, sharpPos, right, color);
+        }
+
         public static void DrawLine(VertexHelper vh, Vector3 p1, Vector3 p2, float size, Color32 color)
         {
+            if (p1 == p2) return;
             Vector3 v = Vector3.Cross(p2 - p1, Vector3.forward).normalized * size;
-            vertex[0].position = p1 + v;
-            vertex[1].position = p2 + v;
-            vertex[2].position = p2 - v;
-            vertex[3].position = p1 - v;
+            vertex[0].position = p1 - v;
+            vertex[1].position = p2 - v;
+            vertex[2].position = p2 + v;
+            vertex[3].position = p1 + v;
+
             for (int j = 0; j < 4; j++)
             {
                 vertex[j].color = color;
                 vertex[j].uv0 = Vector2.zero;
             }
             vh.AddUIVertexQuad(vertex);
+        }
+
+        public static void DrawDashLine(VertexHelper vh, Vector3 p1, Vector3 p2, float size, Color32 color, float dashLen = 15f, float blankLen = 7f)
+        {
+            float dist = Vector3.Distance(p1, p2);
+            if (dist < 0.1f) return;
+            int segment = Mathf.CeilToInt(dist / (dashLen + blankLen));
+            Vector3 dir = (p2 - p1).normalized;
+            Vector3 sp = p1, np;
+            for (int i = 1; i <= segment; i++)
+            {
+                np = p1 + dir * dist * i / segment;
+                var dashep = np - dir * blankLen;
+                DrawLine(vh, sp, dashep, size, color);
+                sp = np;
+            }
+            DrawLine(vh, sp, p2, size, color);
+        }
+        public static void DrawDotLine(VertexHelper vh, Vector3 p1, Vector3 p2, float size, Color32 color, float dotLen = 5f, float blankLen = 5f)
+        {
+            float dist = Vector3.Distance(p1, p2);
+            if (dist < 0.1f) return;
+            int segment = Mathf.CeilToInt(dist / (dotLen + blankLen));
+            Vector3 dir = (p2 - p1).normalized;
+            Vector3 sp = p1, np;
+            for (int i = 1; i <= segment; i++)
+            {
+                np = p1 + dir * dist * i / segment;
+                var dashep = np - dir * blankLen;
+                DrawLine(vh, sp, dashep, size, color);
+                sp = np;
+            }
+            DrawLine(vh, sp, p2, size, color);
+        }
+
+        public static void DrawDashDotLine(VertexHelper vh, Vector3 p1, Vector3 p2, float size, Color32 color, float dashLen = 15f, float blankDotLen = 15f)
+        {
+            float dist = Vector3.Distance(p1, p2);
+            if (dist < 0.1f) return;
+            int segment = Mathf.CeilToInt(dist / (dashLen + blankDotLen));
+            Vector3 dir = (p2 - p1).normalized;
+            Vector3 sp = p1, np;
+            for (int i = 1; i <= segment; i++)
+            {
+                np = p1 + dir * dist * i / segment;
+                var dashep = np - dir * blankDotLen;
+                DrawLine(vh, sp, dashep, size, color);
+                var dotsp = dashep + (blankDotLen - 2 * size) / 2 * dir;
+                var dotep = dotsp + 2 * size * dir;
+                DrawLine(vh, dotsp, dotep, size, color);
+                sp = np;
+            }
+            DrawLine(vh, sp, p2, size, color);
+        }
+
+        public static void DrawDashDotDotLine(VertexHelper vh, Vector3 p1, Vector3 p2, float size, Color32 color, float dashLen = 15f, float blankDotLen = 20f)
+        {
+            float dist = Vector3.Distance(p1, p2);
+            if (dist < 0.1f) return;
+            int segment = Mathf.CeilToInt(dist / (dashLen + blankDotLen));
+            Vector3 dir = (p2 - p1).normalized;
+            Vector3 sp = p1, np;
+            for (int i = 1; i <= segment; i++)
+            {
+                np = p1 + dir * dist * i / segment;
+                var dashep = np - dir * blankDotLen;
+                DrawLine(vh, sp, dashep, size, color);
+                var dotsp = dashep + (blankDotLen / 2 - 2 * size) / 2 * dir;
+                var dotep = dotsp + 2 * size * dir;
+                DrawLine(vh, dotsp, dotep, size, color);
+                var dotsp2 = dashep + blankDotLen / 2 * dir;
+                dotsp2 = dotsp2 + (blankDotLen / 4 - 2 * size) / 2 * dir;
+                var dotep2 = dotsp2 + 2 * size * dir;
+                DrawLine(vh, dotsp2, dotep2, size, color);
+                sp = np;
+            }
+            DrawLine(vh, sp, p2, size, color);
         }
 
         public static void DrawPolygon(VertexHelper vh, Vector3 p, float size, Color32 color)
@@ -221,17 +369,23 @@ namespace XCharts
         public static void DrawTriangle(VertexHelper vh, Vector3 p1,
             Vector3 p2, Vector3 p3, Color32 color)
         {
+            DrawTriangle(vh, p1, p2, p3, color, color, color);
+        }
+
+        public static void DrawTriangle(VertexHelper vh, Vector3 p1,
+           Vector3 p2, Vector3 p3, Color32 color, Color32 color2, Color32 color3)
+        {
             UIVertex v1 = new UIVertex();
             v1.position = p1;
             v1.color = color;
             v1.uv0 = Vector3.zero;
             UIVertex v2 = new UIVertex();
             v2.position = p2;
-            v2.color = color;
+            v2.color = color2;
             v2.uv0 = Vector3.zero;
             UIVertex v3 = new UIVertex();
             v3.position = p3;
-            v3.color = color;
+            v3.color = color3;
             v3.uv0 = Vector3.zero;
             int startIndex = vh.currentVertCount;
             vh.AddVert(v1);
@@ -324,7 +478,21 @@ namespace XCharts
             }
         }
 
-        public static void GetBezierList(ref List<Vector3> posList, Vector3 sp, Vector3 ep, float k = 2.0f)
+        public static void GetPointList(ref List<Vector3> posList, Vector3 sp, Vector3 ep, float k = 30f)
+        {
+            Vector3 dir = (ep - sp).normalized;
+            float dist = Vector3.Distance(sp, ep);
+            int segment = (int)(dist / k);
+            posList.Clear();
+            posList.Add(sp);
+            for (int i = 1; i < segment; i++)
+            {
+                posList.Add(sp + dir * dist * i / segment);
+            }
+            posList.Add(ep);
+        }
+
+        public static void GetBezierList(ref List<Vector3> posList, Vector3 sp, Vector3 ep, bool fine, float k = 2.0f)
         {
             Vector3 dir = (ep - sp).normalized;
             float dist = Vector3.Distance(sp, ep);
@@ -332,20 +500,20 @@ namespace XCharts
             Vector3 cp2 = sp + dist / k * dir * (k - 1);
             cp1.y = sp.y;
             cp2.y = ep.y;
-            int segment = (int)(dist / 0.3f);
+            int segment = (int)(dist / (fine ? 3f : 7f));
             GetBezierList2(ref posList, sp, ep, segment, cp1, cp2);
         }
 
-        public static void GetBezierListVertical(ref List<Vector3> posList, Vector3 sp, Vector3 ep, float k = 2.0f)
+        public static void GetBezierListVertical(ref List<Vector3> posList, Vector3 sp, Vector3 ep, bool fine, float k = 2.0f)
         {
             Vector3 dir = (ep - sp).normalized;
             float dist = Vector3.Distance(sp, ep);
             Vector3 cp1 = sp + dist / k * dir * 1;
             Vector3 cp2 = sp + dist / k * dir * (k - 1);
-            cp1.y = sp.y;
-            cp2.y = ep.y;
-            int segment = (int)(dist / 0.3f);
-            GetBezierList2(ref posList, sp, ep, segment, cp2, cp1);
+            cp1.x = sp.x;
+            cp2.x = ep.x;
+            int segment = (int)(dist / (fine ? 3f : 7f));
+            GetBezierList2(ref posList, sp, ep, segment, cp1, cp2);
         }
 
         public static List<Vector3> GetBezierList(Vector3 sp, Vector3 ep, int segment, Vector3 cp)
@@ -616,6 +784,13 @@ namespace XCharts
                 || (x >= end.x && x <= start.x))
                 && ((y >= start.y && y <= end.y)
                     || (y >= end.y && y <= start.y));
+        }
+
+        public static Vector3 RotateRound(Vector3 position, Vector3 center, Vector3 axis, float angle)
+        {
+            Vector3 point = Quaternion.AngleAxis(angle, axis) * (position - center);
+            Vector3 resultVec3 = center + point;
+            return resultVec3;
         }
     }
 }

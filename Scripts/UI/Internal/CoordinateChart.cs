@@ -6,13 +6,13 @@ using UnityEngine.EventSystems;
 
 namespace XCharts
 {
-    public class CoordinateChart : BaseChart
+    public partial class CoordinateChart : BaseChart
     {
         private static readonly string s_DefaultAxisY = "axis_y";
         private static readonly string s_DefaultAxisX = "axis_x";
         private static readonly string s_DefaultDataZoom = "datazoom";
 
-        [SerializeField] protected Coordinate m_Coordinate = Coordinate.defaultCoordinate;
+        [SerializeField] protected Grid m_Grid = Grid.defaultGrid;
         [SerializeField] protected List<XAxis> m_XAxises = new List<XAxis>();
         [SerializeField] protected List<YAxis> m_YAxises = new List<YAxis>();
         [SerializeField] protected DataZoom m_DataZoom = DataZoom.defaultDataZoom;
@@ -22,85 +22,9 @@ namespace XCharts
         private bool m_DataZoomEndDrag;
         private float m_DataZoomLastStartIndex;
         private float m_DataZoomLastEndIndex;
-
         private List<XAxis> m_CheckXAxises = new List<XAxis>();
         private List<YAxis> m_CheckYAxises = new List<YAxis>();
-        private Coordinate m_CheckCoordinate = Coordinate.defaultCoordinate;
-
-        public float coordinateX { get { return m_Coordinate.left; } }
-        public float coordinateY { get { return m_Coordinate.bottom; } }
-        public float coordinateWid { get { return chartWidth - m_Coordinate.left - m_Coordinate.right; } }
-        public float coordinateHig { get { return chartHeight - m_Coordinate.top - m_Coordinate.bottom; } }
-        public List<XAxis> xAxises { get { return m_XAxises; } }
-        public List<YAxis> yAxises { get { return m_YAxises; } }
-
-        /// <summary>
-        /// Remove all data from series,legend and axis.
-        /// It just emptying all of serie's data without emptying the list of series.
-        /// </summary>
-        public override void ClearData()
-        {
-            base.ClearData();
-            ClearAxisData();
-        }
-
-        /// <summary>
-        /// Remove all data from series,legend and axis.
-        /// The series list is also cleared.
-        /// </summary>
-        public override void RemoveData()
-        {
-            base.RemoveData();
-            ClearAxisData();
-        }
-
-        /// <summary>
-        /// Remove all data of axises.
-        /// </summary>
-        public void ClearAxisData()
-        {
-            foreach (var item in m_XAxises) item.data.Clear();
-            foreach (var item in m_YAxises) item.data.Clear();
-        }
-
-        /// <summary>
-        /// Add a category data to xAxis.
-        /// </summary>
-        /// <param name="category">the category data</param>
-        /// <param name="xAxisIndex">which xAxis should category add to</param>
-        public void AddXAxisData(string category, int xAxisIndex = 0)
-        {
-            m_XAxises[xAxisIndex].AddData(category, m_MaxCacheDataNumber);
-            OnXAxisChanged();
-        }
-
-        /// <summary>
-        /// Add a category data to yAxis.
-        /// </summary>
-        /// <param name="category">the category data</param>
-        /// <param name="yAxisIndex">which yAxis should category add to</param>
-        public void AddYAxisData(string category, int yAxisIndex = 0)
-        {
-            m_YAxises[yAxisIndex].AddData(category, m_MaxCacheDataNumber);
-            OnYAxisChanged();
-        }
-
-        /// <summary>
-        /// Whether is Cartesian coordinates, reutrn true when all the show axis is `Value` type.
-        /// </summary>
-        /// <returns></returns>
-        public bool IsCartesian()
-        {
-            foreach (var axis in m_XAxises)
-            {
-                if (axis.show && !axis.IsValue()) return false;
-            }
-            foreach (var axis in m_YAxises)
-            {
-                if (axis.show && !axis.IsValue()) return false;
-            }
-            return true;
-        }
+        private Grid m_CheckCoordinate = Grid.defaultGrid;
 
         protected override void Awake()
         {
@@ -127,7 +51,7 @@ namespace XCharts
         protected override void Reset()
         {
             base.Reset();
-            m_Coordinate = Coordinate.defaultCoordinate;
+            m_Grid = Grid.defaultGrid;
             m_XAxises.Clear();
             m_YAxises.Clear();
             Awake();
@@ -151,7 +75,7 @@ namespace XCharts
             }
             else
             {
-                var isCartesian = IsCartesian();
+                var isCartesian = IsValue();
                 for (int i = 0; i < m_XAxises.Count; i++)
                 {
                     var xAxis = m_XAxises[i];
@@ -238,9 +162,10 @@ namespace XCharts
                     RefreshChart();
                 }
             }
-            else
+            else if (m_Tooltip.IsActive())
             {
                 m_Tooltip.SetActive(false);
+                RefreshChart();
             }
         }
 
@@ -250,7 +175,7 @@ namespace XCharts
             base.RefreshTooltip();
             int index;
             Axis tempAxis;
-            bool isCartesian = IsCartesian();
+            bool isCartesian = IsValue();
             if (isCartesian)
             {
                 index = m_Tooltip.dataIndex[0];
@@ -268,45 +193,55 @@ namespace XCharts
             }
             if (index < 0)
             {
-                m_Tooltip.SetActive(false);
+                if (m_Tooltip.IsActive())
+                {
+                    m_Tooltip.SetActive(false);
+                    RefreshChart();
+                }
                 return;
             }
 
-            sb.Length = 0;
-
-            if (!isCartesian)
+            if (string.IsNullOrEmpty(tooltip.formatter))
             {
-                sb.Append(tempAxis.GetData(index, m_DataZoom));
-            }
-            for (int i = 0; i < m_Series.Count; i++)
-            {
-                var serie = m_Series.GetSerie(i);
-                if (serie.show)
+                sb.Length = 0;
+                if (!isCartesian)
                 {
-                    string key = serie.name;
-                    float xValue, yValue;
-                    serie.GetXYData(index, m_DataZoom, out xValue, out yValue);
-                    if (isCartesian)
+                    sb.Append(tempAxis.GetData(index, m_DataZoom));
+                }
+                for (int i = 0; i < m_Series.Count; i++)
+                {
+                    var serie = m_Series.GetSerie(i);
+                    if (serie.show)
                     {
-                        var serieData = serie.GetSerieData(index, m_DataZoom);
-                        if (serieData != null && serieData.highlighted)
+                        string key = serie.name;
+                        float xValue, yValue;
+                        serie.GetXYData(index, m_DataZoom, out xValue, out yValue);
+                        if (isCartesian)
                         {
-                            sb.Append(key).Append(!string.IsNullOrEmpty(key) ? " : " : "");
-                            sb.Append("[").Append(ChartCached.FloatToStr(xValue)).Append(",")
-                                .Append(ChartCached.FloatToStr(yValue)).Append("]\n");
+                            var serieData = serie.GetSerieData(index, m_DataZoom);
+                            if (serieData != null && serieData.highlighted)
+                            {
+                                sb.Append(key).Append(!string.IsNullOrEmpty(key) ? " : " : "");
+                                sb.Append("[").Append(ChartCached.FloatToStr(xValue)).Append(",")
+                                    .Append(ChartCached.FloatToStr(yValue)).Append("]\n");
+                            }
+                        }
+                        else
+                        {
+                            sb.Append("\n")
+                                .Append("<color=#").Append(m_ThemeInfo.GetColorStr(i)).Append(">● </color>")
+                                .Append(key).Append(!string.IsNullOrEmpty(key) ? " : " : "")
+                                .Append(ChartCached.FloatToStr(yValue));
                         }
                     }
-                    else
-                    {
-                        sb.Append("\n")
-                            .Append("<color=#").Append(m_ThemeInfo.GetColorStr(i)).Append(">● </color>")
-                            .Append(key).Append(!string.IsNullOrEmpty(key) ? " : " : "")
-                            .Append(ChartCached.FloatToStr(yValue));
-                    }
                 }
+                m_Tooltip.UpdateContentText(sb.ToString().Trim());
             }
-            m_Tooltip.UpdateContentText(sb.ToString().Trim());
-
+            else
+            {
+                var category = tempAxis.GetData(index, m_DataZoom);
+                m_Tooltip.UpdateContentText(m_Tooltip.GetFormatterContent(index, m_Series, category, m_DataZoom));
+            }
             var pos = m_Tooltip.GetContentPos();
             if (pos.x + m_Tooltip.width > chartWidth)
             {
@@ -410,7 +345,6 @@ namespace XCharts
 
         private void InitAxisY()
         {
-            ChartHelper.HideAllObject(gameObject, "split_y");//old name
             for (int i = 0; i < m_YAxises.Count; i++)
             {
                 InitYAxis(i, m_YAxises[i]);
@@ -419,20 +353,24 @@ namespace XCharts
 
         private void InitYAxis(int yAxisIndex, YAxis yAxis)
         {
+            yAxis.minValue = 0;
+            yAxis.maxValue = 100;
             yAxis.axisLabelTextList.Clear();
-            float labelWidth = yAxis.GetScaleWidth(coordinateHig, m_DataZoom);
+
             string objName = yAxisIndex > 0 ? s_DefaultAxisY + "2" : s_DefaultAxisY;
 
             var axisObj = ChartHelper.AddObject(objName, transform, chartAnchorMin,
                 chartAnchorMax, chartPivot, new Vector2(chartWidth, chartHeight));
             axisObj.transform.localPosition = Vector3.zero;
             axisObj.SetActive(yAxis.show && yAxis.axisLabel.show);
-            ChartHelper.HideAllObject(axisObj, objName);
+            ChartHelper.HideAllObject(axisObj);
 
             var labelColor = yAxis.axisLabel.color == Color.clear ?
                 (Color)m_ThemeInfo.axisTextColor :
                 yAxis.axisLabel.color;
-            for (int i = 0; i < yAxis.GetSplitNumber(m_DataZoom); i++)
+            int splitNumber = yAxis.GetSplitNumber(coordinateHig, m_DataZoom);
+            float totalWidth = 0;
+            for (int i = 0; i < splitNumber; i++)
             {
                 Text txt;
                 bool inside = yAxis.axisLabel.inside;
@@ -440,30 +378,34 @@ namespace XCharts
                 {
                     txt = ChartHelper.AddTextObject(objName + i, axisObj.transform,
                         m_ThemeInfo.font, labelColor, TextAnchor.MiddleLeft, Vector2.zero,
-                        Vector2.zero, new Vector2(0, 0.5f), new Vector2(m_Coordinate.left, 20),
+                        Vector2.zero, new Vector2(0, 0.5f), new Vector2(m_Grid.left, 20),
                         yAxis.axisLabel.fontSize, yAxis.axisLabel.rotate, yAxis.axisLabel.fontStyle);
                 }
                 else
                 {
                     txt = ChartHelper.AddTextObject(objName + i, axisObj.transform,
                         m_ThemeInfo.font, labelColor, TextAnchor.MiddleRight, Vector2.zero,
-                        Vector2.zero, new Vector2(1, 0.5f), new Vector2(m_Coordinate.left, 20),
+                        Vector2.zero, new Vector2(1, 0.5f), new Vector2(m_Grid.left, 20),
                         yAxis.axisLabel.fontSize, yAxis.axisLabel.rotate, yAxis.axisLabel.fontStyle);
                 }
+                float labelWidth = yAxis.GetScaleWidth(coordinateHig, i, m_DataZoom);
 
-                txt.transform.localPosition = GetLabelYPosition(labelWidth, i, yAxisIndex, yAxis);
-                txt.text = yAxis.GetLabelName(i, yAxis.minValue, yAxis.maxValue, m_DataZoom);
+                txt.transform.localPosition = GetLabelYPosition(totalWidth + (yAxis.boundaryGap ? labelWidth / 2 : 0), i, yAxisIndex, yAxis);
+
+                txt.text = yAxis.GetLabelName(coordinateHig, i, yAxis.minValue, yAxis.maxValue, m_DataZoom);
                 txt.gameObject.SetActive(yAxis.show &&
                     (yAxis.axisLabel.interval == 0 || i % (yAxis.axisLabel.interval + 1) == 0));
                 yAxis.axisLabelTextList.Add(txt);
+                totalWidth += labelWidth;
             }
             if (yAxis.axisName.show)
             {
                 var color = yAxis.axisName.color == Color.clear ? (Color)m_ThemeInfo.axisTextColor :
                     yAxis.axisName.color;
                 var fontSize = yAxis.axisName.fontSize;
-                var gap = yAxis.axisName.gap;
-                Text axisName;
+                var offset = yAxis.axisName.offset;
+                Text axisName = null;
+                var zeroPos = new Vector3(coordinateX + m_XAxises[yAxisIndex].zeroXOffset, coordinateY);
                 switch (yAxis.axisName.location)
                 {
                     case AxisName.Location.Start:
@@ -472,8 +414,8 @@ namespace XCharts
                              new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(100, 20), fontSize,
                              yAxis.axisName.rotate, yAxis.axisName.fontStyle);
                         axisName.transform.localPosition = yAxisIndex > 0 ?
-                            new Vector2(coordinateX + coordinateWid, coordinateY - gap) :
-                            new Vector2(coordinateX, coordinateY - gap);
+                            new Vector2(coordinateX + coordinateWid + offset.x, coordinateY - offset.y) :
+                            new Vector2(zeroPos.x + offset.x, coordinateY - offset.y);
                         break;
                     case AxisName.Location.Middle:
                         axisName = ChartHelper.AddTextObject(objName + "_name", axisObj.transform,
@@ -481,8 +423,8 @@ namespace XCharts
                             new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(100, 20), fontSize,
                             yAxis.axisName.rotate, yAxis.axisName.fontStyle);
                         axisName.transform.localPosition = yAxisIndex > 0 ?
-                        new Vector2(coordinateX + coordinateWid - gap, coordinateY + coordinateHig / 2) :
-                        new Vector2(coordinateX - gap, coordinateY + coordinateHig / 2);
+                        new Vector2(coordinateX + coordinateWid - offset.x, coordinateY + coordinateHig / 2 + offset.y) :
+                        new Vector2(coordinateX - offset.x, coordinateY + coordinateHig / 2 + offset.y);
                         break;
                     case AxisName.Location.End:
                         axisName = ChartHelper.AddTextObject(objName + "_name", axisObj.transform,
@@ -490,10 +432,11 @@ namespace XCharts
                              new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(100, 20), fontSize,
                              yAxis.axisName.rotate, yAxis.axisName.fontStyle);
                         axisName.transform.localPosition = yAxisIndex > 0 ?
-                            new Vector2(coordinateX + coordinateWid, coordinateY + coordinateHig + gap) :
-                            new Vector2(coordinateX, coordinateY + coordinateHig + gap);
+                            new Vector2(coordinateX + coordinateWid + offset.x, coordinateY + coordinateHig + offset.y) :
+                            new Vector2(zeroPos.x + offset.x, coordinateY + coordinateHig + offset.y);
                         break;
                 }
+                axisName.text = yAxis.axisName.name;
             }
             //init tooltip label
             if (m_Tooltip.gameObject)
@@ -509,7 +452,6 @@ namespace XCharts
 
         private void InitAxisX()
         {
-            ChartHelper.HideAllObject(gameObject, "split_x");//old name
             for (int i = 0; i < m_XAxises.Count; i++)
             {
                 InitXAxis(i, m_XAxises[i]);
@@ -521,26 +463,31 @@ namespace XCharts
             xAxis.minValue = 0;
             xAxis.maxValue = 100;
             xAxis.axisLabelTextList.Clear();
-            float labelWidth = xAxis.GetScaleWidth(coordinateWid, m_DataZoom);
-            string objName = xAxisIndex > 0 ? s_DefaultAxisX + "2" : s_DefaultAxisX;
+
+            string objName = xAxisIndex > 0 ? ChartHelper.Cancat(s_DefaultAxisX, 2) : s_DefaultAxisX;
             var axisObj = ChartHelper.AddObject(objName, transform, chartAnchorMin,
                 chartAnchorMax, chartPivot, new Vector2(chartWidth, chartHeight));
             axisObj.transform.localPosition = Vector3.zero;
             axisObj.SetActive(xAxis.show && xAxis.axisLabel.show);
-            ChartHelper.HideAllObject(axisObj, objName);
+            ChartHelper.HideAllObject(axisObj);
             var labelColor = xAxis.axisLabel.color == Color.clear ?
                 (Color)m_ThemeInfo.axisTextColor :
                 xAxis.axisLabel.color;
-            for (int i = 0; i < xAxis.GetSplitNumber(m_DataZoom); i++)
+            int splitNumber = xAxis.GetSplitNumber(coordinateWid, m_DataZoom);
+            float totalWidth = 0;
+            for (int i = 0; i < splitNumber; i++)
             {
+                float labelWidth = xAxis.GetScaleWidth(coordinateWid, i, m_DataZoom);
                 bool inside = xAxis.axisLabel.inside;
-                Text txt = ChartHelper.AddTextObject(objName + i, axisObj.transform,
+                Text txt = ChartHelper.AddTextObject(ChartHelper.Cancat(objName, i), axisObj.transform,
                     m_ThemeInfo.font, labelColor, TextAnchor.MiddleCenter, new Vector2(0, 1),
                     new Vector2(0, 1), new Vector2(1, 0.5f), new Vector2(labelWidth, 20),
                     xAxis.axisLabel.fontSize, xAxis.axisLabel.rotate, xAxis.axisLabel.fontStyle);
 
-                txt.transform.localPosition = GetLabelXPosition(labelWidth, i, xAxisIndex, xAxis);
-                txt.text = xAxis.GetLabelName(i, xAxis.minValue, xAxis.maxValue, m_DataZoom);
+                txt.transform.localPosition = GetLabelXPosition(totalWidth + (xAxis.boundaryGap ? labelWidth : labelWidth / 2),
+                    i, xAxisIndex, xAxis);
+                totalWidth += labelWidth;
+                txt.text = xAxis.GetLabelName(coordinateWid, i, xAxis.minValue, xAxis.maxValue, m_DataZoom);
                 txt.gameObject.SetActive(xAxis.show &&
                     (xAxis.axisLabel.interval == 0 || i % (xAxis.axisLabel.interval + 1) == 0));
                 xAxis.axisLabelTextList.Add(txt);
@@ -550,44 +497,46 @@ namespace XCharts
                 var color = xAxis.axisName.color == Color.clear ? (Color)m_ThemeInfo.axisTextColor :
                     xAxis.axisName.color;
                 var fontSize = xAxis.axisName.fontSize;
-                var gap = xAxis.axisName.gap;
-                Text axisName;
+                var offset = xAxis.axisName.offset;
+                Text axisName = null;
+                var zeroPos = new Vector3(coordinateX, coordinateY + m_YAxises[xAxisIndex].zeroYOffset);
                 switch (xAxis.axisName.location)
                 {
                     case AxisName.Location.Start:
-                        axisName = ChartHelper.AddTextObject(objName + "_name", axisObj.transform,
+                        axisName = ChartHelper.AddTextObject(ChartHelper.Cancat(objName, "_name"), axisObj.transform,
                             m_ThemeInfo.font, color, TextAnchor.MiddleRight, new Vector2(1, 0.5f),
                             new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(100, 20), fontSize,
                             xAxis.axisName.rotate, xAxis.axisName.fontStyle);
                         axisName.transform.localPosition = xAxisIndex > 0 ?
-                            new Vector2(coordinateX - gap, coordinateY + coordinateHig) :
-                            new Vector2(coordinateX - gap, coordinateY);
+                            new Vector2(zeroPos.x - offset.x, coordinateY + coordinateHig + offset.y) :
+                            new Vector2(zeroPos.x - offset.x, zeroPos.y + offset.y);
                         break;
                     case AxisName.Location.Middle:
-                        axisName = ChartHelper.AddTextObject(objName + "_name", axisObj.transform,
+                        axisName = ChartHelper.AddTextObject(ChartHelper.Cancat(objName, "_name"), axisObj.transform,
                              m_ThemeInfo.font, color, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
                              new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(100, 20), fontSize,
                              xAxis.axisName.rotate, xAxis.axisName.fontStyle);
                         axisName.transform.localPosition = xAxisIndex > 0 ?
-                            new Vector2(coordinateX + coordinateWid / 2, coordinateY + coordinateHig - gap) :
-                            new Vector2(coordinateX + coordinateWid / 2, coordinateY - gap);
+                            new Vector2(coordinateX + coordinateWid / 2 + offset.x, coordinateY + coordinateHig - offset.y) :
+                            new Vector2(coordinateX + coordinateWid / 2 + offset.x, coordinateY - offset.y);
                         break;
                     case AxisName.Location.End:
-                        axisName = ChartHelper.AddTextObject(objName + "_name", axisObj.transform,
+                        axisName = ChartHelper.AddTextObject(ChartHelper.Cancat(objName, "_name"), axisObj.transform,
                              m_ThemeInfo.font, color, TextAnchor.MiddleLeft, new Vector2(0, 0.5f),
                              new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(100, 20), fontSize,
                              xAxis.axisName.rotate, xAxis.axisName.fontStyle);
                         axisName.transform.localPosition = xAxisIndex > 0 ?
-                            new Vector2(coordinateX + coordinateWid + gap, coordinateY + coordinateHig) :
-                            new Vector2(coordinateX + coordinateWid + gap, coordinateY);
+                            new Vector2(coordinateX + coordinateWid + offset.x, coordinateY + coordinateHig + offset.y) :
+                            new Vector2(coordinateX + coordinateWid + offset.x, zeroPos.y + offset.y);
                         break;
                 }
+                axisName.text = xAxis.axisName.name;
             }
             if (m_Tooltip.gameObject)
             {
                 Vector2 privot = xAxisIndex > 0 ? new Vector2(0.5f, 1) : new Vector2(0.5f, 1);
                 var labelParent = m_Tooltip.gameObject.transform;
-                GameObject labelObj = ChartHelper.AddTooltipLabel(objName + "_label", labelParent, m_ThemeInfo.font, privot);
+                GameObject labelObj = ChartHelper.AddTooltipLabel(ChartHelper.Cancat(objName, "_label"), labelParent, m_ThemeInfo.font, privot);
                 xAxis.SetTooltipLabel(labelObj);
                 xAxis.SetTooltipLabelColor(m_ThemeInfo.tooltipBackgroundColor, m_ThemeInfo.tooltipTextColor);
                 xAxis.SetTooltipLabelActive(xAxis.show && m_Tooltip.show && m_Tooltip.type == Tooltip.Type.Corss);
@@ -599,7 +548,7 @@ namespace XCharts
             var dataZoomObject = ChartHelper.AddObject(s_DefaultDataZoom, transform, chartAnchorMin,
                 chartAnchorMax, chartPivot, new Vector2(chartWidth, chartHeight));
             dataZoomObject.transform.localPosition = Vector3.zero;
-            ChartHelper.HideAllObject(dataZoomObject, s_DefaultDataZoom);
+            ChartHelper.HideAllObject(dataZoomObject);
             m_DataZoom.startLabel = ChartHelper.AddTextObject(s_DefaultDataZoom + "start",
                 dataZoomObject.transform, m_ThemeInfo.font, m_ThemeInfo.dataZoomTextColor, TextAnchor.MiddleRight,
                 Vector2.zero, Vector2.zero, new Vector2(1, 0.5f), new Vector2(200, 20));
@@ -632,14 +581,7 @@ namespace XCharts
             {
                 posX = startX - yAxis.axisLabel.margin;
             }
-            if (yAxis.boundaryGap)
-            {
-                return new Vector3(posX, coordinateY + (i + 0.5f) * scaleWid, 0);
-            }
-            else
-            {
-                return new Vector3(posX, coordinateY + i * scaleWid, 0);
-            }
+            return new Vector3(posX, coordinateY + scaleWid, 0);
         }
 
         private Vector3 GetLabelXPosition(float scaleWid, int i, int xAxisIndex, XAxis xAxis)
@@ -655,21 +597,22 @@ namespace XCharts
             {
                 posY = startY - xAxis.axisLabel.margin - xAxis.axisLabel.fontSize / 2;
             }
-            if (xAxis.boundaryGap)
-            {
-                return new Vector3(coordinateX + (i + 1) * scaleWid, posY);
-            }
-            else
-            {
-                return new Vector3(coordinateX + (i + 1 - 0.5f) * scaleWid, posY);
-            }
+            // if (xAxis.boundaryGap)
+            // {
+            //     return new Vector3(coordinateX + (i + 1) * scaleWid, posY);
+            // }
+            // else
+            // {
+            //     return new Vector3(coordinateX + (i + 1 - 0.5f) * scaleWid, posY);
+            // }
+            return new Vector3(coordinateX + scaleWid, posY);
         }
 
         private void CheckCoordinate()
         {
-            if (m_CheckCoordinate != m_Coordinate)
+            if (m_CheckCoordinate != m_Grid)
             {
-                m_CheckCoordinate.Copy(m_Coordinate);
+                m_CheckCoordinate.Copy(m_Grid);
                 OnCoordinateChanged();
             }
         }
@@ -678,6 +621,10 @@ namespace XCharts
         {
             if (!ChartHelper.IsValueEqualsList<YAxis>(m_CheckYAxises, m_YAxises))
             {
+                foreach (var axis in m_CheckYAxises)
+                {
+                    YAxisPool.Release(axis);
+                }
                 m_CheckYAxises.Clear();
                 foreach (var axis in m_YAxises) m_CheckYAxises.Add(axis.Clone());
                 OnYAxisChanged();
@@ -688,6 +635,10 @@ namespace XCharts
         {
             if (!ChartHelper.IsValueEqualsList<XAxis>(m_CheckXAxises, m_XAxises))
             {
+                foreach (var axis in m_CheckXAxises)
+                {
+                    XAxisPool.Release(axis);
+                }
                 m_CheckXAxises.Clear();
                 foreach (var axis in m_XAxises) m_CheckXAxises.Add(axis.Clone());
                 OnXAxisChanged();
@@ -709,10 +660,7 @@ namespace XCharts
 
         private void UpdateAxisMinMaxValue(int axisIndex, Axis axis)
         {
-            axis.minValue = 0;
-            axis.maxValue = 100;
-            if (axis.IsCategory()) return;
-
+            if (axis.IsCategory() || !axis.show) return;
             int tempMinValue = 0;
             int tempMaxValue = 100;
             if (m_XAxises[axisIndex].IsValue() && m_YAxises[axisIndex].IsValue())
@@ -750,7 +698,8 @@ namespace XCharts
                         axis.maxValue < 0 ? coordinateHig :
                         Mathf.Abs(axis.minValue) * (coordinateHig / (Mathf.Abs(axis.minValue) + Mathf.Abs(axis.maxValue)));
                 }
-                axis.UpdateLabelText(m_DataZoom);
+                float coordinateWidth = axis is XAxis ? coordinateWid : coordinateHig;
+                axis.UpdateLabelText(coordinateWidth, m_DataZoom);
                 RefreshChart();
             }
         }
@@ -780,6 +729,7 @@ namespace XCharts
 
         private void DrawCoordinate(VertexHelper vh)
         {
+            DrawGrid(vh);
             for (int i = 0; i < m_XAxises.Count; i++)
             {
                 DrawXAxisTickAndSplit(vh, i, m_XAxises[i]);
@@ -798,16 +748,29 @@ namespace XCharts
             }
         }
 
+        private void DrawGrid(VertexHelper vh)
+        {
+            if (m_Grid.show && m_Grid.backgroundColor != Color.clear)
+            {
+                var p1 = new Vector2(coordinateX, coordinateY);
+                var p2 = new Vector2(coordinateX, coordinateY + coordinateHig);
+                var p3 = new Vector2(coordinateX + coordinateWid, coordinateY + coordinateHig);
+                var p4 = new Vector2(coordinateX + coordinateWid, coordinateY);
+                ChartHelper.DrawPolygon(vh, p1, p2, p3, p4, m_Grid.backgroundColor);
+            }
+        }
+
         private void DrawYAxisTickAndSplit(VertexHelper vh, int yAxisIndex, YAxis yAxis)
         {
             if (yAxis.show)
             {
-                var scaleWidth = yAxis.GetScaleWidth(coordinateHig, m_DataZoom);
-                var size = yAxis.GetScaleNumber(m_DataZoom);
+                var size = yAxis.GetScaleNumber(coordinateWid, m_DataZoom);
+                var totalWidth = coordinateY;
                 for (int i = 0; i < size; i++)
                 {
+                    var scaleWidth = yAxis.GetScaleWidth(coordinateHig, i, m_DataZoom);
                     float pX = 0;
-                    float pY = coordinateY + i * scaleWidth;
+                    float pY = totalWidth;
                     if (yAxis.boundaryGap && yAxis.axisTick.alignWithLabel)
                     {
                         pY -= scaleWidth / 2;
@@ -834,13 +797,14 @@ namespace XCharts
                             pX += startX - yAxis.axisTick.length;
                         }
                         ChartHelper.DrawLine(vh, new Vector3(startX, pY), new Vector3(pX, pY),
-                            m_Coordinate.tickness, m_ThemeInfo.axisLineColor);
+                            yAxis.axisLine.width, m_ThemeInfo.axisLineColor);
                     }
                     if (yAxis.showSplitLine)
                     {
-                        DrawSplitLine(vh, true, yAxis.splitLineType, new Vector3(coordinateX, pY),
+                        DrawSplitLine(vh, yAxis, yAxis.splitLineType, new Vector3(coordinateX, pY),
                             new Vector3(coordinateX + coordinateWid, pY), m_ThemeInfo.axisSplitLineColor);
                     }
+                    totalWidth += scaleWidth;
                 }
             }
         }
@@ -849,11 +813,12 @@ namespace XCharts
         {
             if (xAxis.show)
             {
-                var scaleWidth = xAxis.GetScaleWidth(coordinateWid, m_DataZoom);
-                var size = xAxis.GetScaleNumber(m_DataZoom);
+                var size = xAxis.GetScaleNumber(coordinateWid, m_DataZoom);
+                var totalWidth = coordinateX;
                 for (int i = 0; i < size; i++)
                 {
-                    float pX = coordinateX + i * scaleWidth;
+                    var scaleWidth = xAxis.GetScaleWidth(coordinateWid, i, m_DataZoom);
+                    float pX = totalWidth;
                     float pY = 0;
                     if (xAxis.boundaryGap && xAxis.axisTick.alignWithLabel)
                     {
@@ -881,13 +846,14 @@ namespace XCharts
                             pY += startY - xAxis.axisTick.length;
                         }
                         ChartHelper.DrawLine(vh, new Vector3(pX, startY), new Vector3(pX, pY),
-                            m_Coordinate.tickness, m_ThemeInfo.axisLineColor);
+                            xAxis.axisLine.width, m_ThemeInfo.axisLineColor);
                     }
                     if (xAxis.showSplitLine)
                     {
-                        DrawSplitLine(vh, false, xAxis.splitLineType, new Vector3(pX, coordinateY),
+                        DrawSplitLine(vh, xAxis, xAxis.splitLineType, new Vector3(pX, coordinateY),
                             new Vector3(pX, coordinateY + coordinateHig), m_ThemeInfo.axisSplitLineColor);
                     }
+                    totalWidth += scaleWidth;
                 }
             }
         }
@@ -898,18 +864,14 @@ namespace XCharts
             {
                 var lineY = coordinateY + (xAxis.axisLine.onZero ? m_YAxises[xAxisIndex].zeroYOffset : 0);
                 if (xAxis.IsValue() && xAxisIndex > 0) lineY += coordinateHig;
-                var left = new Vector3(coordinateX - m_Coordinate.tickness, lineY);
-                var top = new Vector3(coordinateX + coordinateWid + m_Coordinate.tickness, lineY);
-                ChartHelper.DrawLine(vh, left, top, m_Coordinate.tickness, m_ThemeInfo.axisLineColor);
+                var left = new Vector3(coordinateX - xAxis.axisLine.width, lineY);
+                var top = new Vector3(coordinateX + coordinateWid + xAxis.axisLine.width, lineY);
+                ChartHelper.DrawLine(vh, left, top, xAxis.axisLine.width, m_ThemeInfo.axisLineColor);
                 if (xAxis.axisLine.symbol)
                 {
                     var axisLine = xAxis.axisLine;
-                    top.x += xAxis.axisLine.symbolOffset;
-                    var middle = new Vector3(top.x - axisLine.symbolHeight + axisLine.symbolDent, lineY);
-                    left = new Vector3(top.x - axisLine.symbolHeight, lineY - axisLine.symbolWidth / 2);
-                    var right = new Vector3(top.x - axisLine.symbolHeight, lineY + axisLine.symbolWidth / 2);
-                    ChartHelper.DrawTriangle(vh, middle, top, left, m_ThemeInfo.axisLineColor);
-                    ChartHelper.DrawTriangle(vh, middle, top, right, m_ThemeInfo.axisLineColor);
+                    ChartHelper.DrawArrow(vh, new Vector3(coordinateX, lineY), top, axisLine.symbolWidth, axisLine.symbolHeight,
+                        axisLine.symbolOffset, axisLine.symbolDent, m_ThemeInfo.axisLineColor);
                 }
             }
         }
@@ -920,18 +882,14 @@ namespace XCharts
             {
                 var lineX = coordinateX + (yAxis.axisLine.onZero ? m_XAxises[yAxisIndex].zeroXOffset : 0);
                 if (yAxis.IsValue() && yAxisIndex > 0) lineX += coordinateWid;
-                var top = new Vector3(lineX, coordinateY + coordinateHig + m_Coordinate.tickness);
-                ChartHelper.DrawLine(vh, new Vector3(lineX, coordinateY - m_Coordinate.tickness),
-                    top, m_Coordinate.tickness, m_ThemeInfo.axisLineColor);
+                var top = new Vector3(lineX, coordinateY + coordinateHig + yAxis.axisLine.width);
+                ChartHelper.DrawLine(vh, new Vector3(lineX, coordinateY - yAxis.axisLine.width),
+                    top, yAxis.axisLine.width, m_ThemeInfo.axisLineColor);
                 if (yAxis.axisLine.symbol)
                 {
                     var axisLine = yAxis.axisLine;
-                    top.y += yAxis.axisLine.symbolOffset;
-                    var middle = new Vector3(lineX, top.y - axisLine.symbolHeight + axisLine.symbolDent);
-                    var left = new Vector3(lineX - axisLine.symbolWidth / 2, top.y - axisLine.symbolHeight);
-                    var right = new Vector3(lineX + axisLine.symbolWidth / 2, top.y - axisLine.symbolHeight);
-                    ChartHelper.DrawTriangle(vh, middle, top, left, m_ThemeInfo.axisLineColor);
-                    ChartHelper.DrawTriangle(vh, middle, top, right, m_ThemeInfo.axisLineColor);
+                    ChartHelper.DrawArrow(vh, new Vector3(lineX, coordinateX), top, axisLine.symbolWidth, axisLine.symbolHeight,
+                        axisLine.symbolOffset, axisLine.symbolDent, m_ThemeInfo.axisLineColor);
                 }
             }
         }
@@ -943,15 +901,16 @@ namespace XCharts
             var p2 = new Vector2(coordinateX, m_DataZoom.bottom + m_DataZoom.height);
             var p3 = new Vector2(coordinateX + coordinateWid, m_DataZoom.bottom + m_DataZoom.height);
             var p4 = new Vector2(coordinateX + coordinateWid, m_DataZoom.bottom);
-            ChartHelper.DrawLine(vh, p1, p2, m_Coordinate.tickness, m_ThemeInfo.dataZoomLineColor);
-            ChartHelper.DrawLine(vh, p2, p3, m_Coordinate.tickness, m_ThemeInfo.dataZoomLineColor);
-            ChartHelper.DrawLine(vh, p3, p4, m_Coordinate.tickness, m_ThemeInfo.dataZoomLineColor);
-            ChartHelper.DrawLine(vh, p4, p1, m_Coordinate.tickness, m_ThemeInfo.dataZoomLineColor);
+            var xAxis = xAxises[0];
+            ChartHelper.DrawLine(vh, p1, p2, xAxis.axisLine.width, m_ThemeInfo.dataZoomLineColor);
+            ChartHelper.DrawLine(vh, p2, p3, xAxis.axisLine.width, m_ThemeInfo.dataZoomLineColor);
+            ChartHelper.DrawLine(vh, p3, p4, xAxis.axisLine.width, m_ThemeInfo.dataZoomLineColor);
+            ChartHelper.DrawLine(vh, p4, p1, xAxis.axisLine.width, m_ThemeInfo.dataZoomLineColor);
             if (m_DataZoom.showDataShadow && m_Series.Count > 0)
             {
                 Serie serie = m_Series.series[0];
                 Axis axis = yAxises[0];
-                float scaleWid = coordinateWid / (serie.yData.Count - 1);
+                float scaleWid = coordinateWid / (serie.data.Count - 1);
                 Vector3 lp = Vector3.zero;
                 Vector3 np = Vector3.zero;
                 int minValue = 0;
@@ -959,21 +918,21 @@ namespace XCharts
                 m_Series.GetYMinMaxValue(null, 0, out minValue, out maxValue);
                 axis.AdjustMinMaxValue(ref minValue, ref maxValue);
                 if (minValue > 0 && maxValue > 0) minValue = 0;
-                for (int i = 0; i < serie.yData.Count; i++)
+                for (int i = 0; i < serie.data.Count; i++)
                 {
-                    float value = serie.yData[i];
+                    float value = serie.data[i].data[1];
                     float pX = coordinateX + i * scaleWid;
                     float dataHig = value / (maxValue - minValue) * m_DataZoom.height;
                     np = new Vector3(pX, m_DataZoom.bottom + dataHig);
                     if (i > 0)
                     {
                         Color color = m_ThemeInfo.dataZoomLineColor;
-                        ChartHelper.DrawLine(vh, lp, np, m_Coordinate.tickness, color);
-                        Vector3 alp = new Vector3(lp.x, lp.y - m_Coordinate.tickness);
-                        Vector3 anp = new Vector3(np.x, np.y - m_Coordinate.tickness);
+                        ChartHelper.DrawLine(vh, lp, np, xAxis.axisLine.width, color);
+                        Vector3 alp = new Vector3(lp.x, lp.y - xAxis.axisLine.width);
+                        Vector3 anp = new Vector3(np.x, np.y - xAxis.axisLine.width);
                         Color areaColor = new Color(color.r, color.g, color.b, color.a * 0.75f);
-                        Vector3 tnp = new Vector3(np.x, m_DataZoom.bottom + m_Coordinate.tickness);
-                        Vector3 tlp = new Vector3(lp.x, m_DataZoom.bottom + m_Coordinate.tickness);
+                        Vector3 tnp = new Vector3(np.x, m_DataZoom.bottom + xAxis.axisLine.width);
+                        Vector3 tlp = new Vector3(lp.x, m_DataZoom.bottom + xAxis.axisLine.width);
                         ChartHelper.DrawPolygon(vh, alp, anp, tnp, tlp, areaColor);
                     }
                     lp = np;
@@ -989,45 +948,32 @@ namespace XCharts
                     p3 = new Vector2(end, m_DataZoom.bottom + m_DataZoom.height);
                     p4 = new Vector2(end, m_DataZoom.bottom);
                     ChartHelper.DrawPolygon(vh, p1, p2, p3, p4, m_ThemeInfo.dataZoomSelectedColor);
-                    ChartHelper.DrawLine(vh, p1, p2, m_Coordinate.tickness, m_ThemeInfo.dataZoomSelectedColor);
-                    ChartHelper.DrawLine(vh, p3, p4, m_Coordinate.tickness, m_ThemeInfo.dataZoomSelectedColor);
+                    ChartHelper.DrawLine(vh, p1, p2, xAxis.axisLine.width, m_ThemeInfo.dataZoomSelectedColor);
+                    ChartHelper.DrawLine(vh, p3, p4, xAxis.axisLine.width, m_ThemeInfo.dataZoomSelectedColor);
                     break;
             }
         }
 
-        protected void DrawSplitLine(VertexHelper vh, bool isYAxis, Axis.SplitLineType type,
+        protected void DrawSplitLine(VertexHelper vh, Axis axis, Axis.SplitLineType type,
             Vector3 startPos, Vector3 endPos, Color color)
         {
+            bool isYAxis = axis is YAxis;
             switch (type)
             {
                 case Axis.SplitLineType.Dashed:
+                    ChartHelper.DrawDashLine(vh, startPos, endPos, axis.axisLine.width, color);
+                    break;
                 case Axis.SplitLineType.Dotted:
-                    var startX = startPos.x;
-                    var startY = startPos.y;
-                    var dashLen = type == Axis.SplitLineType.Dashed ? 6 : 2.5f;
-                    var count = isYAxis ? (endPos.x - startPos.x) / (dashLen * 2) :
-                        (endPos.y - startPos.y) / (dashLen * 2);
-                    for (int i = 0; i < count; i++)
-                    {
-                        if (isYAxis)
-                        {
-                            var toX = startX + dashLen;
-                            ChartHelper.DrawLine(vh, new Vector3(startX, startY), new Vector3(toX, startY),
-                                m_Coordinate.tickness, color);
-                            startX += dashLen * 2;
-                        }
-                        else
-                        {
-                            var toY = startY + dashLen;
-                            ChartHelper.DrawLine(vh, new Vector3(startX, startY), new Vector3(startX, toY),
-                                m_Coordinate.tickness, color);
-                            startY += dashLen * 2;
-                        }
-
-                    }
+                    ChartHelper.DrawDotLine(vh, startPos, endPos, axis.axisLine.width, color);
                     break;
                 case Axis.SplitLineType.Solid:
-                    ChartHelper.DrawLine(vh, startPos, endPos, m_Coordinate.tickness, color);
+                    ChartHelper.DrawLine(vh, startPos, endPos, axis.axisLine.width, color);
+                    break;
+                case Axis.SplitLineType.DashDot:
+                    ChartHelper.DrawDashDotLine(vh, startPos, endPos, axis.axisLine.width, color);
+                    break;
+                case Axis.SplitLineType.DashDotDot:
+                    ChartHelper.DrawDashDotDotLine(vh, startPos, endPos, axis.axisLine.width, color);
                     break;
             }
         }
@@ -1052,12 +998,12 @@ namespace XCharts
                         if (xAxis.IsValue()) pX = m_Tooltip.pointerPos.x;
                         Vector2 sp = new Vector2(pX, coordinateY);
                         Vector2 ep = new Vector2(pX, coordinateY + coordinateHig);
-                        DrawSplitLine(vh, false, Axis.SplitLineType.Solid, sp, ep, m_ThemeInfo.tooltipLineColor);
+                        DrawSplitLine(vh, xAxis, Axis.SplitLineType.Solid, sp, ep, m_ThemeInfo.tooltipLineColor);
                         if (m_Tooltip.type == Tooltip.Type.Corss)
                         {
                             sp = new Vector2(coordinateX, m_Tooltip.pointerPos.y);
                             ep = new Vector2(coordinateX + coordinateWid, m_Tooltip.pointerPos.y);
-                            DrawSplitLine(vh, true, Axis.SplitLineType.Dashed, sp, ep, m_ThemeInfo.tooltipLineColor);
+                            DrawSplitLine(vh, yAxis, Axis.SplitLineType.Dashed, sp, ep, m_ThemeInfo.tooltipLineColor);
                         }
                         break;
                     case Tooltip.Type.Shadow:
@@ -1084,6 +1030,7 @@ namespace XCharts
             for (int i = 0; i < m_YAxises.Count; i++)
             {
                 var yAxis = m_YAxises[i];
+                var xAxis = m_XAxises[i];
                 if (!yAxis.show) continue;
                 float splitWidth = yAxis.GetDataWidth(coordinateHig, m_DataZoom);
                 switch (m_Tooltip.type)
@@ -1094,12 +1041,12 @@ namespace XCharts
                         float pY = coordinateY + m_Tooltip.yValues[i] * splitWidth + (yAxis.boundaryGap ? splitWidth / 2 : 0);
                         Vector2 sp = new Vector2(coordinateX, pY);
                         Vector2 ep = new Vector2(coordinateX + coordinateWid, pY);
-                        DrawSplitLine(vh, false, Axis.SplitLineType.Solid, sp, ep, m_ThemeInfo.tooltipLineColor);
+                        DrawSplitLine(vh, xAxis, Axis.SplitLineType.Solid, sp, ep, m_ThemeInfo.tooltipLineColor);
                         if (m_Tooltip.type == Tooltip.Type.Corss)
                         {
                             sp = new Vector2(coordinateX, m_Tooltip.pointerPos.y);
                             ep = new Vector2(coordinateX + coordinateWid, m_Tooltip.pointerPos.y);
-                            DrawSplitLine(vh, true, Axis.SplitLineType.Dashed, sp, ep, m_ThemeInfo.tooltipLineColor);
+                            DrawSplitLine(vh, yAxis, Axis.SplitLineType.Dashed, sp, ep, m_ThemeInfo.tooltipLineColor);
                         }
                         break;
                     case Tooltip.Type.Shadow:
@@ -1143,6 +1090,99 @@ namespace XCharts
                 else
                 {
                     m_DataZoom.SetLabelActive(false);
+                }
+            }
+        }
+
+        protected void DrawLabelBackground(VertexHelper vh)
+        {
+            var isYAxis = m_YAxises[0].type == Axis.AxisType.Category
+                || m_YAxises[1].type == Axis.AxisType.Category;
+            for (int n = 0; n < m_Series.Count; n++)
+            {
+                var serie = m_Series.GetSerie(n);
+                if (!serie.show) continue;
+                var zeroPos = Vector3.zero;
+                var lastStackSerie = m_Series.GetLastStackSerie(n);
+                if (serie.type == SerieType.Bar)
+                {
+                    if (serie.label.position == SerieLabel.Position.Bottom || serie.label.position == SerieLabel.Position.Center)
+                    {
+                        if (isYAxis)
+                        {
+                            var xAxis = m_XAxises[serie.axisIndex];
+                            zeroPos = new Vector3(coordinateX + xAxis.zeroXOffset, coordinateY);
+                        }
+                        else
+                        {
+                            var yAxis = m_YAxises[serie.axisIndex];
+                            zeroPos = new Vector3(coordinateX, coordinateY + yAxis.zeroYOffset);
+                        }
+                    }
+                }
+                for (int j = 0; j < serie.data.Count; j++)
+                {
+                    var serieData = serie.data[j];
+                    if (serie.label.show)
+                    {
+                        var pos = serie.dataPoints[j];
+                        var value = serieData.data[1];
+                        switch (serie.type)
+                        {
+                            case SerieType.Line:
+                                break;
+                            case SerieType.Bar:
+                                var bottomPos = lastStackSerie == null ? zeroPos : lastStackSerie.dataPoints[j];
+                                switch (serie.label.position)
+                                {
+                                    case SerieLabel.Position.Center:
+
+                                        pos = isYAxis ? new Vector3(bottomPos.x + (pos.x - bottomPos.x) / 2, pos.y) :
+                                            new Vector3(pos.x, bottomPos.y + (pos.y - bottomPos.y) / 2);
+                                        break;
+                                    case SerieLabel.Position.Bottom:
+                                        pos = isYAxis ? new Vector3(bottomPos.x, pos.y) : new Vector3(pos.x, bottomPos.y);
+                                        break;
+                                }
+                                break;
+                        }
+                        var centerPos = isYAxis ? new Vector3(pos.x + (value >= 0 ? 1 : -1) * serie.label.distance, pos.y) :
+                            new Vector3(pos.x, pos.y + (value >= 0 ? 1 : -1) * serie.label.distance);
+                        serieData.labelPosition = centerPos;
+                        DrawLabelBackground(vh, serie, serieData);
+                    }
+                    else
+                    {
+                        serieData.SetLabelActive(false);
+                    }
+                }
+            }
+        }
+
+        protected override void OnRefreshLabel()
+        {
+            var isYAxis = m_YAxises[0].type == Axis.AxisType.Category
+                || m_YAxises[1].type == Axis.AxisType.Category;
+            for (int i = 0; i < m_Series.Count; i++)
+            {
+                var serie = m_Series.GetSerie(i);
+                var total = serie.yTotal;
+                for (int j = 0; j < serie.data.Count; j++)
+                {
+                    var serieData = serie.data[j];
+                    if (serie.show && serie.label.show && j < serie.dataPoints.Count)
+                    {
+                        var pos = serie.dataPoints[j];
+                        var value = serieData.data[1];
+                        var content = serie.label.GetFormatterContent(serie.name, serieData.name, value, total);
+                        serieData.SetLabelActive(true);
+                        if (serieData.SetLabelText(content)) RefreshChart();
+                        serieData.SetLabelPosition(serieData.labelPosition);
+                    }
+                    else
+                    {
+                        serieData.SetLabelActive(false);
+                    }
                 }
             }
         }
